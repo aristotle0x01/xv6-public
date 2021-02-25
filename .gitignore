@@ -14,3 +14,7 @@ kernel
 kernelmemfs
 mkfs
 .gdbinit
+.DS_Store
+Untitled.xcworkspace/contents.xcworkspacedata
+Untitled.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+Untitled.xcworkspace/xcuserdata/wanghao18.xcuserdatad/UserInterfaceState.xcuserstate
