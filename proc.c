@@ -6,6 +6,23 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "pstat.h"
+
+// simple pseudo random generator implementation
+// https://d-michail.github.io/assets/teaching/programming-I/060_RandomNumbers.en.pdf
+#define r_a 1103515245
+#define r_c 12345
+#define r_m 1<<31
+static unsigned int r_seed = 1;
+void srand(unsigned int s) {
+    r_seed = s;
+}
+int rand(int range) {
+    if(range <= 0) return 0;
+
+    r_seed = (r_a * r_seed + r_c) % range;
+    return r_seed;
+}
 
 struct {
   struct spinlock lock;
@@ -215,6 +232,7 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+  np->tickets = curproc->tickets;
 
   release(&ptable.lock);
 
@@ -325,7 +343,7 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  
+
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -353,6 +371,95 @@ scheduler(void)
     release(&ptable.lock);
 
   }
+}
+
+// lottery scheduler can be exchanged with scheduler(void) by exchanging name
+void
+scheduler_lottery(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+
+  unsigned long seed = 1;
+  for(;;){
+    seed++;
+
+    // Enable interrupts on this processor.
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+
+    int totaltickets = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+
+      if(p->tickets <= 0)
+        p->tickets = 1;
+
+      totaltickets = totaltickets + p->tickets;
+    }
+    // srand(seed);
+    int winner = rand(totaltickets);
+
+    int counter = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+
+      counter = counter + p->tickets;
+      if(counter > winner)
+      {
+          // cprintf("\n XV6_TEST_OUTPUT scheduler %d %d %d\n", p->pid, p->ticks, p->tickets);
+
+          // Switch to chosen process.  It is the process's job
+          // to release ptable.lock and then reacquire it
+          // before jumping back to us.
+          c->proc = p;
+          switchuvm(p);
+          p->state = RUNNING;
+
+          swtch(&(c->scheduler), p->context);
+          switchkvm();
+
+          // used one clock circle
+          p->ticks++;
+
+          // Process is done running for now.
+          // It should have changed its p->state before coming back.
+          c->proc = 0;
+
+          break;
+      }
+    }
+    release(&ptable.lock);
+  }
+}
+
+int
+inner_getpinfo(struct pstat* ps)
+{
+    struct proc *p;
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    int index = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state == UNUSED){
+        ps->inuse[index] = 0;
+      } else {
+        ps->inuse[index] = 1;
+        ps->pid[index] = p->pid;
+        ps->tickets[index] = p->tickets;
+        ps->ticks[index] = p->ticks;
+      }
+      index++;
+    }
+    release(&ptable.lock);
+
+    return 0;
 }
 
 // Enter scheduler.  Must hold only ptable.lock

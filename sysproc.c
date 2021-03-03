@@ -6,6 +6,9 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "pstat.h"
+
+extern int inner_getpinfo(struct pstat *p);
 
 int
 sys_fork(void)
@@ -88,4 +91,33 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+int
+sys_settickets()
+{
+    int tickets;
+
+    if(argint(0, &tickets) < 0)
+        return -1;
+
+    if(tickets < 1)
+        return -1;
+
+    cprintf("sys_settickets tickets is %d \n", tickets);
+
+    myproc()->tickets = tickets;
+    return 0;
+}
+
+int
+sys_getpinfo()
+{
+    struct pstat *p;
+    if(argptr(0, (void*)&p, sizeof(struct pstat)) < 0)
+        return -1;
+
+    inner_getpinfo(p);
+
+    return 0;
 }
