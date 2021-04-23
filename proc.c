@@ -55,10 +55,10 @@ struct cpu*
 mycpu(void)
 {
   int apicid, i;
-  
+
   if(readeflags()&FL_IF)
     panic("mycpu called with interrupts enabled\n");
-  
+
   apicid = lapicid();
   // APIC IDs are not guaranteed to be contiguous. Maybe we should have
   // a reverse map, or reserve a register to store &cpus[i].
@@ -141,7 +141,7 @@ userinit(void)
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
   p = allocproc();
-  
+
   initproc = p;
   if((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
@@ -239,6 +239,111 @@ fork(void)
   return pid;
 }
 
+int fork_thread(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack)
+{
+  int i, pid;
+  struct proc *np;
+  struct proc *curproc = myproc();
+
+  // Allocate process.
+  if((np = allocproc()) == 0){
+    return -1;
+  }
+
+  np->pgdir = curproc->pgdir;
+
+  np->sz = curproc->sz;
+  np->parent = curproc;
+  *np->tf = *curproc->tf;
+
+  // ref: https://ppan-brian.medium.com/context-switch-from-xv6-aedcb1246cd
+  // user space instruction pointer
+  np->thread_stack = (char *)stack;
+  cprintf("\nXV6_TEST_OUTPUT thread_stack set %d %d\n", (uint)np->thread_stack, *(uint *)stack);
+  (*np->tf).eip = (uint)fcn;
+  (*np->tf).esp = (uint)stack + KSTACKSIZE;
+  (*np->tf).esp -= 4;
+  *(uint*)(*np->tf).esp = (uint)arg2;
+  (*np->tf).esp -= 4;
+  *(uint*)(*np->tf).esp = (uint)arg1;
+  (*np->tf).esp -= 4;
+  // by setting 0xffffffff it will cause a trap like:
+  // trap 14 err 5 on cpu 0 eip 0xffffffff addr 0xffffffff--kill proc
+  // which will lead to exit being called in trap.c line 102
+  // (if(myproc() && myproc()->killed && (tf->cs&3) == DPL_USER))
+  // thus with thread zombie state set, it can be waited in main thread 
+  // to free resources
+  *(uint*)(*np->tf).esp = (uint)0xffffffff;
+
+  // Clear %eax so that fork returns 0 in the child.
+  np->tf->eax = 0;
+
+  for(i = 0; i < NOFILE; i++)
+    if(curproc->ofile[i])
+      np->ofile[i] = filedup(curproc->ofile[i]);
+  np->cwd = idup(curproc->cwd);
+
+  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+  pid = np->pid;
+
+  acquire(&ptable.lock);
+
+  np->state = RUNNABLE;
+  np->tickets = curproc->tickets;
+
+  release(&ptable.lock);
+
+  return pid;
+}
+
+int wait_thread(void **stack)
+{
+  struct proc *p;
+  int havekids, pid;
+  struct proc *curproc = myproc();
+
+  acquire(&ptable.lock);
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->parent != curproc)
+        continue;
+      havekids = 1;
+      if(p->state == ZOMBIE){
+        // Found one.
+        pid = p->pid;
+        kfree(p->kstack);
+        p->kstack = 0;
+        // can not free pgdir, because it is thread wait
+        // freevm(p->pgdir);
+        p->pid = 0;
+        p->parent = 0;
+        p->name[0] = 0;
+        p->killed = 0;
+        p->state = UNUSED;
+
+        // return user stack to be freed
+        uint *tp = *stack;
+        *(uint *)tp = (uint)p->thread_stack;
+
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || curproc->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(curproc, &ptable.lock);  //DOC: wait-sleep
+  }
+}
+
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait() to find out it exited.
@@ -293,7 +398,7 @@ wait(void)
   struct proc *p;
   int havekids, pid;
   struct proc *curproc = myproc();
-  
+
   acquire(&ptable.lock);
   for(;;){
     // Scan through table looking for exited children.
@@ -525,7 +630,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   if(p == 0)
     panic("sleep");
 
