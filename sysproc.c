@@ -96,6 +96,19 @@ sys_uptime(void)
 }
 
 int
+sys_date(void)
+{
+  struct rtcdate *rd;
+
+  if(argptr(0, (void*)&rd, sizeof(struct rtcdate)) < 0)
+    return -1;
+
+  cmostime(rd);
+
+  return 0;
+}
+
+int
 sys_settickets()
 {
     int tickets;

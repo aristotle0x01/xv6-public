@@ -31,6 +31,7 @@ int mprotect(void *addr, int len);
 int munprotect(void *addr, int len);
 int clone(void(*fcn)(void *, void *), void *arg1, void *arg2, void *stack);
 int join(void **stack);
+int date(struct rtcdate*);
 
 // ulib.c
 int stat(const char*, struct stat*);
