@@ -197,7 +197,9 @@ syscall(void)
 
     curproc->tf->eax = syscalls[num]();
 
-    cprintf("%s <-> %d\n", syscall_names[num], curproc->tf->eax);
+    if (!sizeof(syscall_names)) {
+      cprintf("%s <-> %d\n", syscall_names[num], curproc->tf->eax);
+    }
   } else {
     cprintf("%d %s: unknown sys call %d\n",
             curproc->pid, curproc->name, num);

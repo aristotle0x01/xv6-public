@@ -16,6 +16,8 @@ extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
 uint ticks;
 
+extern int mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm);
+
 void
 tvinit(void)
 {
@@ -38,16 +40,6 @@ idtinit(void)
 void
 trap(struct trapframe *tf)
 {
-  if(tf->trapno == T_SYSCALL){
-    if(myproc()->killed)
-      exit();
-    myproc()->tf = tf;
-    syscall();
-    if(myproc()->killed)
-      exit();
-    return;
-  }
-
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
     if(cpuid() == 0){
@@ -88,11 +80,53 @@ trap(struct trapframe *tf)
               tf->trapno, cpuid(), tf->eip, rcr2());
       panic("trap");
     }
+
+    if(tf->trapno == T_SYSCALL){
+      if(myproc()->killed)
+        exit();
+      
+      myproc()->tf = tf;
+      syscall();
+
+      if(myproc()->killed)
+        exit();
+      
+      break;
+    }
+
+    if(tf->trapno == T_PGFLT){
+      if(myproc()->killed)
+        exit();
+      
+      myproc()->tf = tf;
+      
+      uint vaddr = rcr2();    
+      uint a = PGROUNDDOWN(vaddr);
+      char *mem = kalloc();
+      if(mem == 0){
+        cprintf("page fault: allocuvm out of memory\n");
+        deallocuvm(myproc()->pgdir, a+PGSIZE, a);
+        exit();
+      }
+      memset(mem, 0, PGSIZE);
+      if(mappages(myproc()->pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
+        cprintf("page fault: allocuvm out of memory (2)\n");
+        deallocuvm(myproc()->pgdir, a+PGSIZE, a);
+        kfree(mem);
+        exit();
+      }
+      
+      if(myproc()->killed)
+        exit();
+      
+      break;
+    }
+
     // In user space, assume process misbehaved.
     cprintf("pid %d %s: trap %d err %d on cpu %d "
-            "eip 0x%x addr 0x%x--kill proc\n",
+            "eip 0x%x addr 0x%x--kill proc with size %d\n",
             myproc()->pid, myproc()->name, tf->trapno,
-            tf->err, cpuid(), tf->eip, rcr2());
+            tf->err, cpuid(), tf->eip, rcr2(), myproc()->sz);
     myproc()->killed = 1;
   }
 
