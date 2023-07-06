@@ -129,6 +129,11 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  p->alarmticks = 0;
+  p->alarmhandler = 0;
+  p->alarmtick_count = 0;
+  p->alarmhandler_entered = 0;
+
   return p;
 }
 

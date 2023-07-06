@@ -55,6 +55,11 @@ struct proc {
   int ticks;                   // the number of ticks each process has accumulated
 
   char *thread_stack;          // user stack of forked thread passed by thread_create
+
+  int alarmticks;              // alarm
+  void (*alarmhandler)();      
+  int alarmtick_count;
+  uint alarmhandler_entered;   // 1: true, 0: false
 };
 
 // Process memory is laid out contiguously, low addresses first:

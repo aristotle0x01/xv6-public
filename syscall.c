@@ -116,6 +116,7 @@ extern int sys_munprotect(void);
 extern int sys_clone(void);
 extern int sys_join(void);
 extern int sys_date(void);
+extern int sys_alarm(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -146,7 +147,8 @@ static int (*syscalls[])(void) = {
 [SYS_munprotect]   sys_munprotect,
 [SYS_clone]   sys_clone,
 [SYS_join]   sys_join,
-[SYS_date]   sys_date
+[SYS_date]   sys_date,
+[SYS_alarm]   sys_alarm
 };
 
 static char *syscall_names[] = {
@@ -178,7 +180,8 @@ static char *syscall_names[] = {
 [SYS_munprotect]   "munprotect",
 [SYS_clone]   "clone",
 [SYS_join]   "join",
-[SYS_date]   "date"
+[SYS_date]   "date",
+[SYS_alarm]   "alarm"
 };
 
 _Atomic int readcount = 0;

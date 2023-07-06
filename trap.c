@@ -49,6 +49,24 @@ trap(struct trapframe *tf)
       release(&tickslock);
     }
     lapiceoi();
+
+    if (myproc() != 0 && (tf->cs & 3) == 3 && myproc()->alarmticks) {
+      if (myproc()->alarmtick_count >= myproc()->alarmticks) {
+        if (!myproc()->alarmhandler_entered) {
+          myproc()->alarmhandler_entered = 1;
+
+          (myproc()->tf)->esp -= 4;
+          *(uint*)((myproc()->tf)->esp) = (myproc()->tf)->eip;
+
+          (myproc()->tf)->eip = (uint)myproc()->alarmhandler;
+          
+          myproc()->alarmtick_count = 0;
+          myproc()->alarmhandler_entered = 0;
+        }
+      } else {
+        myproc()->alarmtick_count++;
+      }
+    }
     break;
   case T_IRQ0 + IRQ_IDE:
     ideintr();
