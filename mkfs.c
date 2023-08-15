@@ -259,7 +259,7 @@ iappend(uint inum, void *xp, int n)
   uint fbn, off, n1;
   struct dinode din;
   char buf[BSIZE];
-  uint indirect[NINDIRECT];
+  uint indirect[NBLKENTRY];
   uint x;
 
   rinode(inum, &din);
@@ -273,7 +273,7 @@ iappend(uint inum, void *xp, int n)
         din.addrs[fbn] = xint(freeblock++);
       }
       x = xint(din.addrs[fbn]);
-    } else {
+    } else if (fbn >= NDIRECT && fbn < (NDIRECT+NBLKENTRY)) {
       if(xint(din.addrs[NDIRECT]) == 0){
         din.addrs[NDIRECT] = xint(freeblock++);
       }
@@ -283,6 +283,27 @@ iappend(uint inum, void *xp, int n)
         wsect(xint(din.addrs[NDIRECT]), (char*)indirect);
       }
       x = xint(indirect[fbn-NDIRECT]);
+    } else {
+      uint p1entry, p2entry;
+      p1entry = (fbn-NDIRECT-NBLKENTRY)/NBLKENTRY;
+      p2entry = (fbn-NDIRECT-NBLKENTRY)%NBLKENTRY;
+
+      if(xint(din.addrs[NDIRECT+1]) == 0){
+        din.addrs[NDIRECT+1] = xint(freeblock++);
+      }
+      rsect(xint(din.addrs[NDIRECT+1]), (char*)indirect);
+      if(indirect[p1entry] == 0){
+        indirect[p1entry] = xint(freeblock++);
+        wsect(xint(din.addrs[NDIRECT+1]), (char*)indirect);
+      }
+      uint indirect2[NBLKENTRY];
+      rsect(xint(indirect[p1entry]), (char*)indirect2);
+      if(indirect2[p2entry] == 0){
+        indirect2[p2entry] = xint(freeblock++);
+        wsect(xint(indirect[p1entry]), (char*)indirect2);
+      }
+
+      x = xint(indirect2[p2entry]);
     }
     n1 = min(n, (fbn + 1) * BSIZE - off);
     rsect(x, buf);
