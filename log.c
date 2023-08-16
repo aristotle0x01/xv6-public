@@ -72,11 +72,18 @@ install_trans(void)
   int tail;
 
   for (tail = 0; tail < log.lh.n; tail++) {
-    struct buf *lbuf = bread(log.dev, log.start+tail+1); // read log block
+    // https://pdos.csail.mit.edu/6.828/2018/homework/xv6-new-log.html: Streamlining Commit
+    // Make sure you understand why it would be a mistake for the buffer 
+    // cache to evict block 33 from the buffer cache before the commit?
+    // Ans: must persist first in write_log(void) "// cache block" line
+    // if evicted, then it won't make it to disk
     struct buf *dbuf = bread(log.dev, log.lh.block[tail]); // read dst
-    memmove(dbuf->data, lbuf->data, BSIZE);  // copy block to dst
+    if (!log.committing) {
+      struct buf *lbuf = bread(log.dev, log.start+tail+1); // read log block
+      memmove(dbuf->data, lbuf->data, BSIZE);  // copy block to dst
+      brelse(lbuf);
+    }
     bwrite(dbuf);  // write dst to disk
-    brelse(lbuf);
     brelse(dbuf);
   }
 }
