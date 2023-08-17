@@ -72,11 +72,16 @@ install_trans(void)
   int tail;
 
   for (tail = 0; tail < log.lh.n; tail++) {
-    // https://pdos.csail.mit.edu/6.828/2018/homework/xv6-new-log.html: Streamlining Commit
+    // https://pdos.csail.mit.edu/6.828/2018/homework/xv6-new-log.html
+    // Why was the file empty, even though you created it with echo hi > a?:
+    // by tracing writei, directory entry is first logged to disk and then
+    // panic, so upon recovery, the file is empty
+    // 
+    // Streamlining Commit:
     // Make sure you understand why it would be a mistake for the buffer 
     // cache to evict block 33 from the buffer cache before the commit?
     // Ans: must persist first in write_log(void) "// cache block" line
-    // if evicted, then it won't make it to disk
+    // if evicted, then modification won't make it to disk
     struct buf *dbuf = bread(log.dev, log.lh.block[tail]); // read dst
     if (!log.committing) {
       struct buf *lbuf = bread(log.dev, log.start+tail+1); // read log block
